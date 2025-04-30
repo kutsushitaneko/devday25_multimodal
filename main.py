@@ -104,7 +104,8 @@ def main():
         )
     
     # アプリケーションの起動
-    demo.launch(share=False, inbrowser=True)
+    demo.launch(share=False, inbrowser=True) # ローカルで起動
+    #demo.launch(share=True, server_name='0.0.0.0', server_port=8899) # リモートで起動
 
 if __name__ == "__main__":
     main() 
