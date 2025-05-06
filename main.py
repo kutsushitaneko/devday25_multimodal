@@ -1,4 +1,6 @@
 import gradio as gr
+import time
+import threading
 from app.config import Config
 from app.embedding_service import EmbeddingService
 from app.database_service import DatabaseService  
@@ -7,16 +9,45 @@ from app.ui.components import UIComponents
 from app.ui.events import UIEvents
 from app.search_query_generator import SearchQueryGenerator
 
+def check_db_connection(config, db_pool, interval=60):
+    """定期的にデータベース接続の健全性をチェックするバックグラウンドスレッド"""
+    while True:
+        try:
+            if not config.check_pool_health(db_pool):
+                print("データベース接続プールが不健全です。再接続を試みます...")
+                # 古いプールを閉じる
+                try:
+                    db_pool.close()
+                except Exception as e:
+                    print(f"プールのクローズ中にエラーが発生しました: {e}")
+                
+                # 新しいプールを作成
+                db_pool = config.get_db_pool()
+                print("データベース接続プールを再作成しました。")
+        except Exception as e:
+            print(f"接続チェック中にエラーが発生しました: {e}")
+        
+        # 指定された間隔で次のチェックを実行
+        time.sleep(interval)
+
 def main():
     # 設定と基本サービスを初期化
     config = Config()
-    db_connection = config.get_db_connection()
+    db_pool = config.get_db_pool()  # コネクションプールを取得
     cohere_client = config.get_cohere_client()
     search_query_generator = SearchQueryGenerator()
     
+    # データベース接続監視スレッドを開始
+    db_monitor_thread = threading.Thread(
+        target=check_db_connection,
+        args=(config, db_pool, 60),  # 60秒ごとにチェック
+        daemon=True  # メインスレッド終了時に自動的に終了
+    )
+    db_monitor_thread.start()
+    
     # 各サービスを初期化
     embedding_service = EmbeddingService(cohere_client)
-    database_service = DatabaseService(db_connection)
+    database_service = DatabaseService(db_pool)  # プールを渡す
     search_service = SearchService(embedding_service, database_service, search_query_generator)
     
     # UIコンポーネントとイベントを初期化
@@ -108,4 +139,4 @@ def main():
     #demo.launch(share=True, server_name='0.0.0.0', server_port=8899) # リモートで起動
 
 if __name__ == "__main__":
-    main() 
+    main()
