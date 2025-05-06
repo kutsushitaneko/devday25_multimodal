@@ -59,7 +59,16 @@ def main():
         gr.Markdown("# マルチモーダル画像検索")
         gr.Markdown("画像を自然言語やアップロードした画像で検索できます。例: 「富士山と寺院」、「縞模様の猫」、「三匹の白い子猫」、「ホグワーツ魔法学校」、「上海のビル」、「2312.10997」、「search_queries_only」など")
         
-        state = gr.State(None)
+        state = gr.State({
+            "current_page": 1,
+            "total_pages": 1,
+            "page_size": 0,
+            "total_image_count": 0,
+            "all_images": [],
+            "combined_results": [],
+            "vector_results": [],
+            "keyword_results": []
+        })
         
         # 検索セクションのUIコンポーネントを作成
         search_target, search_method, query_input, uploaded_image, search_button, clear_button, show_all_button, query_examples = ui_components.create_search_section()
@@ -129,7 +138,7 @@ def main():
             outputs=None
         ).then(
             fn=ui_events.show_all_images,
-            inputs=[top_k_slider],
+            inputs=[top_k_slider, state],
             outputs=[vector_gallery, keyword_gallery, filename_text, similarity_text, 
                      caption_text, state, executed_query_text, executed_sql_text, pagination_row, page_info, prev_button, next_button]
         )
