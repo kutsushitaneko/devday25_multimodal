@@ -7,11 +7,6 @@ class UIEvents:
     
     def __init__(self, search_service):
         self.search_service = search_service
-        self.current_page = 1
-        self.total_pages = 1
-        self.page_size = 0
-        self.all_images = []
-        self.total_image_count = 0
         
     def register_search_target_events(self, search_target, search_method, query_input, uploaded_image, query_examples, executed_sql_text):
         """検索対象変更時のイベントを登録"""
@@ -105,7 +100,7 @@ class UIEvents:
             outputs=[vector_gallery, keyword_gallery, filename_text, similarity_text, caption_text, state, executed_query_text, executed_sql_text]
         ).then(
             fn=self.show_all_images,
-            inputs=[top_k_slider],
+            inputs=[top_k_slider, state],
             outputs=[vector_gallery, keyword_gallery, filename_text, similarity_text, caption_text, state, executed_query_text, executed_sql_text, pagination_row, page_info, prev_button, next_button]
         )
     
@@ -113,13 +108,13 @@ class UIEvents:
         """ページングボタンのイベントを登録"""
         prev_button.click(
             fn=self.prev_page,
-            inputs=[top_k_slider],
+            inputs=[top_k_slider, state],
             outputs=[vector_gallery, page_info, state, keyword_gallery, prev_button_out, next_button_out]
         )
         
         next_button.click(
             fn=self.next_page,
-            inputs=[top_k_slider],
+            inputs=[top_k_slider, state],
             outputs=[vector_gallery, page_info, state, keyword_gallery, prev_button_out, next_button_out]
         )
         
@@ -318,40 +313,87 @@ class UIEvents:
     def clear_before_search(self):
         """検索前にギャラリーとテキスト表示をクリアする関数"""
         # ギャラリーのコンテンツはクリアするが、表示設定は変更しない
-        return [], [], "", "", "", {"combined_results": [], "vector_results": [], "keyword_results": []}, "", ""  # vector_gallery, keyword_gallery, filename_text, similarity_text, caption_text, state, executed_query_text, executed_sql_text
+        return [], [], "", "", "", {
+            "current_page": 1,
+            "total_pages": 1,
+            "page_size": 0,
+            "total_image_count": 0,
+            "all_images": [],
+            "combined_results": [],
+            "vector_results": [],
+            "keyword_results": []
+        }, "", ""  # vector_gallery, keyword_gallery, filename_text, similarity_text, caption_text, state, executed_query_text, executed_sql_text
         
     def clear_results(self):
         """検索結果とフォームをクリアする関数"""
         # すべてのフィールドをクリア
-        self.current_page = 1
-        self.total_pages = 1
-        self.page_size = 0
-        self.all_images = []
-        self.total_image_count = 0
-        return "", None, [], [], "", "", "", {"combined_results": [], "vector_results": [], "keyword_results": []}, "", ""  # query_input, uploaded_image, vector_gallery, keyword_gallery, filename_text, similarity_text, caption_text, state, executed_query_text, executed_sql_text
+        return "", None, [], [], "", "", "", {
+            "current_page": 1,
+            "total_pages": 1,
+            "page_size": 0,
+            "total_image_count": 0,
+            "all_images": [],
+            "combined_results": [],
+            "vector_results": [],
+            "keyword_results": []
+        }, "", ""  # query_input, uploaded_image, vector_gallery, keyword_gallery, filename_text, similarity_text, caption_text, state, executed_query_text, executed_sql_text
         
     def clear_before_custom_search(self):
         """カスタム検索前に結果表示をクリアするがクエリテキストは維持する関数"""
         # 表示フィールドのみクリア（クエリテキストは保持）
-        return [], "", "", "", {"combined_results": [], "vector_results": [], "keyword_results": []}, "", ""  # vector_gallery, filename_text, similarity_text, caption_text, state, executed_sql_text, executed_query_text
+        return [], "", "", "", {
+            "current_page": 1,
+            "total_pages": 1,
+            "page_size": 0,
+            "total_image_count": 0,
+            "all_images": [],
+            "combined_results": [],
+            "vector_results": [],
+            "keyword_results": []
+        }, "", ""  # vector_gallery, filename_text, similarity_text, caption_text, state, executed_sql_text, executed_query_text
     
-    def show_all_images(self, top_k):
+    def show_all_images(self, top_k, state_data=None):
         """全件表示ボタンの処理を行う関数"""
+        # state_dataがNoneの場合は初期化
+        if state_data is None:
+            state_data = {
+                "current_page": 1,
+                "total_pages": 1,
+                "page_size": 0,
+                "total_image_count": 0,
+                "all_images": [],
+                "combined_results": [],
+                "vector_results": [],
+                "keyword_results": []
+            }
+            
         # 総画像数を取得
-        self.total_image_count = self.search_service.database_service.get_total_image_count()
+        total_image_count = self.search_service.database_service.get_total_image_count()
         
         # スライダーで設定された数分だけ最新の画像を取得
-        self.current_page = 1
-        self.page_size = top_k
+        current_page = 1
+        page_size = top_k
         
         # 1ページ目のデータを取得
-        results, executed_sql = self.search_service.database_service.get_recent_images(top_k, (self.current_page - 1) * top_k)
+        results, executed_sql = self.search_service.database_service.get_recent_images(top_k, (current_page - 1) * top_k)
         
         # 結果を保存
-        self.all_images = results
+        all_images = results
         
         # 総ページ数を計算
-        self.total_pages = math.ceil(self.total_image_count / top_k) if top_k > 0 else 1
+        total_pages = math.ceil(total_image_count / top_k) if top_k > 0 else 1
+        
+        # 状態を更新
+        state_data.update({
+            "current_page": current_page,
+            "total_pages": total_pages,
+            "page_size": page_size,
+            "total_image_count": total_image_count,
+            "all_images": all_images,
+            "combined_results": results,
+            "vector_results": results,
+            "keyword_results": []
+        })
         
         # 結果を整形
         output_images = []
@@ -363,10 +405,10 @@ class UIEvents:
             first_result = results[0]
             
             # ページング情報を更新
-            page_info_text = f"{self.current_page}/{self.total_pages} ページ（総合計 {self.total_image_count} 枚）"
+            page_info_text = f"{current_page}/{total_pages} ページ（総合計 {total_image_count} 枚）"
             
             # ページングボタンの状態を更新
-            prev_button, next_button = self.update_pagination_buttons()
+            prev_button, next_button = self.update_pagination_buttons(state_data)
             
             return (
                 gr.Gallery(label="全件表示", value=output_images),  # vector_gallery - ラベルを「全件表示」に変更
@@ -374,7 +416,7 @@ class UIEvents:
                 first_result['file_name'],  # filename_text
                 "",  # similarity_text
                 self.search_service.normalize_newlines(first_result['caption']),  # caption_text
-                {"combined_results": results, "vector_results": results, "keyword_results": []},  # state
+                state_data,  # state
                 "（全件表示）",  # executed_query_text
                 executed_sql,  # executed_sql_text
                 gr.update(visible=True),  # pagination_row
@@ -383,79 +425,152 @@ class UIEvents:
                 next_button   # next_button
             )
         
-        return [], gr.Gallery(visible=False), "", "", "", {"combined_results": [], "vector_results": [], "keyword_results": []}, "（画像が見つかりません）", executed_sql, gr.update(visible=False), "0/0 ページ", gr.update(interactive=False), gr.update(interactive=False)
+        return [], gr.Gallery(visible=False), "", "", "", {
+            "current_page": 1,
+            "total_pages": 0,
+            "page_size": top_k,
+            "total_image_count": 0,
+            "all_images": [],
+            "combined_results": [],
+            "vector_results": [],
+            "keyword_results": []
+        }, "（画像が見つかりません）", executed_sql, gr.update(visible=False), "0/0 ページ", gr.update(interactive=False), gr.update(interactive=False)
     
-    def prev_page(self, top_k):
+    def prev_page(self, top_k, state_data=None):
         """前のページに移動する関数"""
-        if self.current_page > 1:
-            self.current_page -= 1
+        # state_dataがNoneの場合は初期化
+        if state_data is None:
+            state_data = {
+                "current_page": 1,
+                "total_pages": 1,
+                "page_size": 0,
+                "total_image_count": 0,
+                "all_images": [],
+                "combined_results": [],
+                "vector_results": [],
+                "keyword_results": []
+            }
+            return gr.Gallery(label="全件表示", value=[]), "0/0 ページ", state_data, gr.Gallery(visible=False), gr.update(interactive=False), gr.update(interactive=False)
+        
+        # 現在の状態を取得
+        current_page = state_data.get("current_page", 1)
+        total_pages = state_data.get("total_pages", 1)
+        total_image_count = state_data.get("total_image_count", 0)
+        all_images = state_data.get("all_images", [])
+        
+        # 前のページに移動（1ページ目より前には行かない）
+        if current_page > 1:
+            current_page -= 1
             
             # 前のページのデータを取得
-            results, _ = self.search_service.database_service.get_recent_images(top_k, (self.current_page - 1) * top_k)
-            self.all_images = results
+            results, _ = self.search_service.database_service.get_recent_images(top_k, (current_page - 1) * top_k)
+            all_images = results
+            
+            # 状態を更新
+            state_data.update({
+                "current_page": current_page,
+                "all_images": all_images
+            })
         
         # 結果を整形
         output_images = []
-        for result in self.all_images:
+        for result in all_images:
             if isinstance(result['image'], Image.Image):
                 output_images.append(result['image'])
         
         # ページング情報を更新
-        page_info_text = f"{self.current_page}/{self.total_pages} ページ（総合計 {self.total_image_count} 枚）"
+        page_info_text = f"{current_page}/{total_pages} ページ（総合計 {total_image_count} 枚）"
         
-        # state も更新する
-        state_data = {"combined_results": self.all_images, "vector_results": self.all_images, "keyword_results": []}
+        # 状態データを更新
+        state_data.update({
+            "combined_results": all_images,
+            "vector_results": all_images,
+            "keyword_results": []
+        })
         
         # ページングボタンの状態を更新
-        prev_button, next_button = self.update_pagination_buttons()
+        prev_button, next_button = self.update_pagination_buttons(state_data)
         
         # 選択状態をリセットしたギャラリーを返す
         return gr.Gallery(label="全件表示", value=output_images, selected_index=None), page_info_text, state_data, gr.Gallery(visible=False), prev_button, next_button
     
-    def next_page(self, top_k):
+    def next_page(self, top_k, state_data=None):
         """次のページに移動する関数"""
+        # state_dataがNoneの場合は初期化
+        if state_data is None:
+            state_data = {
+                "current_page": 1,
+                "total_pages": 1,
+                "page_size": 0,
+                "total_image_count": 0,
+                "all_images": [],
+                "combined_results": [],
+                "vector_results": [],
+                "keyword_results": []
+            }
+            return gr.Gallery(label="全件表示", value=[]), "0/0 ページ", state_data, gr.Gallery(visible=False), gr.update(interactive=False), gr.update(interactive=False)
+        
+        # 現在の状態を取得
+        current_page = state_data.get("current_page", 1)
+        total_pages = state_data.get("total_pages", 1)
+        total_image_count = state_data.get("total_image_count", 0)
+        all_images = state_data.get("all_images", [])
+        
         # 次のページに移動（最大ページ数を超えないように）
-        if self.current_page < self.total_pages:
-            self.current_page += 1
+        if current_page < total_pages:
+            current_page += 1
             
             # 次のページのデータを取得
-            results, _ = self.search_service.database_service.get_recent_images(top_k, (self.current_page - 1) * top_k)
+            results, _ = self.search_service.database_service.get_recent_images(top_k, (current_page - 1) * top_k)
             
             # 結果がない場合は前のページに戻る
             if not results:
-                self.current_page -= 1
-                page_info_text = f"{self.current_page}/{self.total_pages} ページ（総合計 {self.total_image_count} 枚）（最終ページ）"
-                # 前のページのデータを維持
-                output_images = []
-                for result in self.all_images:
-                    if isinstance(result['image'], Image.Image):
-                        output_images.append(result['image'])
-                # state も更新
-                state_data = {"combined_results": self.all_images, "vector_results": self.all_images, "keyword_results": []}
+                current_page -= 1
+                page_info_text = f"{current_page}/{total_pages} ページ（総合計 {total_image_count} 枚）（最終ページ）"
                 
-                # ページングボタンの状態を更新
-                prev_button, next_button = self.update_pagination_buttons()
+                # 状態を更新
+                state_data.update({
+                    "current_page": current_page
+                })
                 
                 # 選択状態をリセットしたギャラリーを返す
+                output_images = []
+                for result in all_images:
+                    if isinstance(result['image'], Image.Image):
+                        output_images.append(result['image'])
+                
+                # ページングボタンの状態を更新
+                prev_button, next_button = self.update_pagination_buttons(state_data)
+                
                 return gr.Gallery(label="全件表示", value=output_images, selected_index=None), page_info_text, state_data, gr.Gallery(visible=False), prev_button, next_button
             
             # 結果がある場合は更新
-            self.all_images = results
+            all_images = results
+            
+            # 状態を更新
+            state_data.update({
+                "current_page": current_page,
+                "all_images": all_images
+            })
         
         # 結果を整形
         output_images = []
-        for result in self.all_images:
+        for result in all_images:
             if isinstance(result['image'], Image.Image):
                 output_images.append(result['image'])
         
         # ページング情報を更新
-        page_info_text = f"{self.current_page}/{self.total_pages} ページ（総合計 {self.total_image_count} 枚）"
+        page_info_text = f"{current_page}/{total_pages} ページ（総合計 {total_image_count} 枚）"
         
-        # state も更新する
-        state_data = {"combined_results": self.all_images, "vector_results": self.all_images, "keyword_results": []}
+        # 状態データを更新
+        state_data.update({
+            "combined_results": all_images,
+            "vector_results": all_images,
+            "keyword_results": []
+        })
         
         # ページングボタンの状態を更新
-        prev_button, next_button = self.update_pagination_buttons()
+        prev_button, next_button = self.update_pagination_buttons(state_data)
         
         # 選択状態をリセットしたギャラリーを返す
         return gr.Gallery(label="全件表示", value=output_images, selected_index=None), page_info_text, state_data, gr.Gallery(visible=False), prev_button, next_button
@@ -464,12 +579,12 @@ class UIEvents:
         """ページング用UIを非表示にする関数"""
         return gr.update(visible=False)
         
-    def update_pagination_buttons(self):
+    def update_pagination_buttons(self, state_data):
         """ページングボタンの状態を更新する関数"""
         # 1ページ目では「前へ」ボタンをグレーアウト
         # 最終ページでは「次へ」ボタンをグレーアウト
-        prev_interactive = self.current_page > 1
-        next_interactive = self.current_page < self.total_pages
+        prev_interactive = state_data["current_page"] > 1
+        next_interactive = state_data["current_page"] < state_data["total_pages"]
         
         return gr.update(interactive=prev_interactive), gr.update(interactive=next_interactive)
         
