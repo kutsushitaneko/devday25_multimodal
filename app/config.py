@@ -68,3 +68,30 @@ class Config:
     def get_cohere_client(self):
         # Cohereクライアントを初期化
         return cohere.Client(api_key=self.cohere_api_key) 
+    
+    def get_db_pool(self):
+        # コネクションプールを生成
+        pool = oracledb.create_pool(
+            user=self.db_user,
+            password=self.db_password,
+            dsn=self.db_dsn,
+            min=2,
+            max=10,
+            increment=1,
+            timeout=60,
+            getmode=oracledb.POOL_GETMODE_WAIT
+        )
+        return pool
+        
+    def check_pool_health(self, pool):
+        """コネクションプールの健全性を確認するメソッド"""
+        try:
+            with pool.acquire() as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT 1 FROM DUAL")
+                result = cursor.fetchone()
+                cursor.close()
+                return result is not None and result[0] == 1
+        except oracledb.DatabaseError as e:
+            print(f"プール健全性チェックエラー: {e}")
+            return False
